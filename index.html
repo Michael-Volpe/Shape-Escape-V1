@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shape Escape - 2 Player Edition</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="ui">
+        <div class="score-box">
+            <div class="label circle" id="labelP1">Circle (P1)</div>
+            <div>High: <span id="highScoreP1">0</span></div>
+            <div>Score: <span id="scoreValueP1">0</span></div>
+        </div>
+        
+        <div class="level-box">
+            <div>Level: <span id="levelValue">1</span></div>
+            <div><span id="timerValue">0.00</span>s</div>
+        </div>
+
+        <div class="score-box">
+            <div class="label square" id="labelP2">Square (P2)</div>
+            <div>High: <span id="highScoreP2">0</span></div>
+            <div>Score: <span id="scoreValueP2">0</span></div>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <div id="pauseOverlay" class="hidden">
+            <div class="pause-icon">
+                <div class="pause-bar"></div>
+                <div class="pause-bar"></div>
+            </div>
+            <div class="pause-text">PAUSED</div>
+        </div>
+
+        <div id="menu">
+            <h1 class="glitch" data-text="SHAPE ESCAPE">SHAPE ESCAPE</h1>
+            <p>Stay off the ceiling!</p>
+            <br>
+            <div class="btn-group-vertical">
+                <button onclick="startGame(1)">Singleplayer</button>
+                <button onclick="startGame(2)">2 Player</button>
+                <button onclick="toggleCustomization()" class="menu-btn">Customize Players</button>
+            </div>
+        </div>
+
+        <div id="customizationMenu" class="hidden">
+            <div class="glass wide">
+                <h2>CHARACTER CREATOR</h2>
+                <div class="custom-grid">
+                    <div class="player-col">
+                        <div class="preview-card">
+                            <div id="p1Preview" class="preview-box"></div>
+                            <span id="prevName1" class="preview-name">Player 1</span>
+                        </div>
+                        <div class="input-group">
+                            <label>NAME</label>
+                            <input type="text" id="p1Name" placeholder="P1 Name" oninput="updateCustoms()" maxlength="10">
+                            
+                            <label>COLOR</label>
+                            <input type="color" id="p1Color" value="#ff4444" oninput="updateCustoms()">
+                            
+                            <label>SHAPE</label>
+                            <select id="p1Shape" onchange="updateCustoms()">
+                                <option value="50%">Circle</option>
+                                <option value="0%">Square</option>
+                                <option value="8px">Rounded</option>
+                                <option value="triangle">Triangle</option>
+                                <option value="diamond">Diamond</option>
+                                <option value="hexagon">Hexagon</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="player-col">
+                        <div class="preview-card">
+                            <div id="p2Preview" class="preview-box"></div>
+                            <span id="prevName2" class="preview-name">Player 2</span>
+                        </div>
+                        <div class="input-group">
+                            <label>NAME</label>
+                            <input type="text" id="p2Name" placeholder="P2 Name" oninput="updateCustoms()" maxlength="10">
+                            
+                            <label>COLOR</label>
+                            <input type="color" id="p2Color" value="#4444ff" oninput="updateCustoms()">
+                            
+                            <label>SHAPE</label>
+                            <select id="p2Shape" onchange="updateCustoms()">
+                                <option value="0%">Square</option>
+                                <option value="50%">Circle</option>
+                                <option value="8px">Rounded</option>
+                                <option value="triangle">Triangle</option>
+                                <option value="diamond">Diamond</option>
+                                <option value="hexagon">Hexagon</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <button class="save-btn" onclick="toggleCustomization()">SAVE & CLOSE</button>
+            </div>
+        </div>
+
+        <div id="gameOver" class="hidden">
+            <div class="glass">
+                <h2 class="glitch" data-text="GAME OVER">GAME OVER</h2>
+                
+                <div id="finalScores">
+                    <div id="finalP1Row" class="final-score-row">
+                        <span id="finalP1Name">PLAYER 1</span>
+                        <span id="finalP1">0</span>
+                    </div>
+                    <div id="finalP2Row" class="final-score-row hidden">
+                        <span id="finalP2Name">PLAYER 2</span>
+                        <span id="finalP2">0</span>
+                    </div>
+                </div>
+
+                <div class="btn-group-vertical">
+                    <button onclick="restartGame()">PLAY AGAIN</button>
+                    <button class="menu-btn" onclick="goToMenu()">MAIN MENU</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="game">
+            <div id="character"></div>
+            <div id="particle-container"></div>
+        </div>
+    </div>
+
+    <audio id="sfx-click" src="https://actions.google.com/sounds/v1/foley/button_click.ogg" preload="auto" crossorigin="anonymous"></audio>
+    <audio id="sfx-lightning" src="https://actions.google.com/sounds/v1/electricity/zap.ogg" preload="auto" crossorigin="anonymous"></audio>
+    <audio id="sfx-fire" src="https://actions.google.com/sounds/v1/foley/fire_crackle.ogg" preload="auto" crossorigin="anonymous"></audio>
+    <audio id="sfx-death" src="https://actions.google.com/sounds/v1/cartoon/boing_spring.ogg" preload="auto" crossorigin="anonymous"></audio>
+    <audio id="bg-music" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" loop preload="auto" crossorigin="anonymous"></audio>
+
+    <script src="script.js"></script>
+</body>
+</html>
