@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gamemodes - Shape Escape</title>
+    <link rel="stylesheet" href="gamemodes.css">
+</head>
+<body>
+    <div id="game-container">
+        <div id="menu">
+            <h1 class="glitch" data-text="GAMEMODES">GAMEMODES</h1>
+            <p>Select your challenge</p>
+            <br>
+            
+            <div class="btn-group-vertical">
+                <button onclick="selectMode(1)">Singleplayer</button>
+                <button onclick="selectMode(2)">2 Player</button>
+                
+                <br>
+                <button class="menu-btn" onclick="window.location.href='../index.html'" style="border-color: #ff4444; color: #ff4444;">
+                    BACK TO MENU
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function selectMode(mode) {
+            // Store the choice
+            sessionStorage.setItem("lastGameMode", mode);
+            // Use ../ to redirect to the main page correctly
+            window.location.href = '../index.html';
+        }
+    </script>
+</body>
+</html>

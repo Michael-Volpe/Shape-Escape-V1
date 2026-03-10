@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard - Shape Escape</title>
+    <link rel="stylesheet" href="leaderboard.css">
+</head>
+<body>
+    <div id="game-container">
+        <div id="menu">
+            <h1>HALL OF FAME</h1>
+            <p>Top 100 Leaderboard</p>
+            
+            <div class="glass leaderboard-wrapper">
+                <table id="leaderboardTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>NAME</th>
+                            <th>SCORE</th>
+                            <th>LVL</th>
+                            <th>TIME</th>
+                            <th>DATE</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboardBody">
+                        </tbody>
+                </table>
+            </div>
+
+            <div class="btn-group-vertical">
+                <button class="menu-btn" onclick="window.location.href='../index.html'">
+                    BACK TO MENU
+                </button>
+            </div>
+        </div>
+    </div>
+    <script src="https://unpkg.com/convex@1.9.0/dist/browser.bundle.js"></script>
+    <script src="leaderboard.js"></script>
+</body>
+</html>
