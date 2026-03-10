@@ -1,3 +1,13 @@
+/* --- GAMEMODE SYNC LOGIC --- */
+window.addEventListener('load', () => {
+    const selectedMode = sessionStorage.getItem("lastGameMode");
+    if (selectedMode) {
+        sessionStorage.removeItem("lastGameMode");
+        document.getElementById("menu").classList.add("hidden");
+        startGame(parseInt(selectedMode));
+    }
+});
+
 const character = document.getElementById("character");
 const game = document.getElementById("game");
 const particleContainer = document.getElementById("particle-container");
@@ -15,8 +25,6 @@ let gameRunning = false, isPaused = false, animationId;
 let gracePeriod = false; 
 let transitioning = false; 
 let floorCollapsed = false; 
-let nukeActive = false;
-let ballisticActive = false; 
 
 // --- PHYSICS & DESIGN ---
 let platformSpeed = 1;    
@@ -32,26 +40,139 @@ let scoredPlatforms = { p1: new Set(), p2: new Set() };
 let abilitiesEnabled = false;
 let isClipped = false; 
 let targetToggle = 0; 
-let ballisticToggle = 0;
 
 let p1 = { top: 250, left: 180, vY: 0, grounded: false, score: 0, dead: false, element: character, id: 'p1', color: '#ff4444', isCrouching: false, name: "Circle", shape: "50%", reviveProgress: 0, isInvulnerable: false };
 let p2 = { top: 250, left: 240, vY: 0, grounded: false, score: 0, dead: false, element: null, id: 'p2', active: false, color: '#4444ff', isCrouching: false, name: "Square", shape: "0%", reviveProgress: 0, isInvulnerable: false };
 
 let keys = {};
 
-// --- CUSTOMIZATION LOGIC ---
+// --- CONVEX CLIENT SETUP ---
+const convexClient = new convex.ConvexClient("https://famous-skunk-169.convex.cloud");
+
+// --- ONLINE FEATURE LOGIC ---
+function updateOnlineCount() {
+    convexClient.query("functions:getOnlineCount").then(count => {
+        const countElem = document.getElementById("online-count");
+        if (countElem) countElem.innerText = count || 1;
+    }).catch(() => { });
+}
+
+// --- AUTHENTICATION LOGIC ---
+async function handleAuth(type) {
+    const user = document.getElementById("auth-username").value;
+    const pass = document.getElementById("auth-password").value;
+
+    if (!user || !pass) return alert("Enter both fields!");
+
+    try {
+        if (type === 'signup') {
+            await convexClient.mutation("functions:createAccount", { username: user, password: pass });
+            alert("Account created! Now click Login.");
+        } else {
+            const result = await convexClient.query("functions:checkLogin", { username: user, password: pass });
+            if (result && typeof result === 'object' && result.username) {
+                loginSuccess(result.username, true); 
+            } else if (typeof result === 'string') {
+                loginSuccess(result, true);
+            } else {
+                alert("Wrong username or password!");
+            }
+        }
+    } catch (err) {
+        alert("Error: " + err.message);
+    }
+}
+
+async function loginSuccess(name, isManual = false) {
+    if (!name || typeof name !== 'string') return;
+    
+    const previousUser = localStorage.getItem("gameUsername");
+    localStorage.setItem("gameUsername", name);
+    
+    // FETCH BEST SCORE FROM DATABASE TO SYNC ACCOUNT
+    try {
+        const scores = await convexClient.query("functions:getTopScores");
+        const myEntry = scores.find(s => s.name === name);
+        const bestScore = myEntry ? myEntry.score : 0;
+        localStorage.setItem("highScoreP1", bestScore);
+        loadHighScores(); 
+    } catch(e) { 
+        if (previousUser !== name) {
+            localStorage.setItem("highScoreP1", 0);
+            localStorage.setItem("highScoreP2", 0);
+            loadHighScores();
+        }
+    }
+
+    document.getElementById("login-form").classList.add("hidden");
+    document.getElementById("user-display").classList.remove("hidden");
+    document.getElementById("player-name-tag").innerText = name.toUpperCase();
+    
+    const welcome = document.getElementById("welcome-tag");
+    const dot = document.getElementById("status-dot");
+    
+    if (welcome) {
+        welcome.innerText = name;
+        welcome.style.color = "#ff4444";
+    }
+    if (dot) {
+        dot.className = ""; 
+        dot.style.background = "#00ff88"; 
+        dot.style.boxShadow = "0 0 8px #00ff88";
+        dot.style.animation = "none";
+    }
+    
+    if (document.getElementById("p1Name")) {
+        document.getElementById("p1Name").value = name;
+        updateCustoms();
+    }
+    
+    if (isManual) {
+        setTimeout(toggleAuthPopup, 800);
+    }
+}
+
+function logout() {
+    localStorage.removeItem("gameUsername");
+    localStorage.setItem("highScoreP1", 0);
+    localStorage.setItem("highScoreP2", 0);
+    location.reload();
+}
+
+function toggleAuthPopup() {
+    const overlay = document.getElementById("auth-overlay");
+    if (overlay.classList.contains("hidden")) {
+        overlay.classList.remove("hidden");
+        overlay.style.display = "flex";
+    } else {
+        overlay.classList.add("hidden");
+        overlay.style.display = "none";
+    }
+}
+
+function setUIVisibility(visible) {
+    const authArea = document.getElementById("auth-trigger-area");
+    const onlineArea = document.getElementById("online-feature-area");
+    const displayStyle = visible ? "flex" : "none";
+    
+    if (authArea) authArea.style.display = displayStyle;
+    if (onlineArea) onlineArea.style.display = displayStyle;
+}
+
 function toggleCustomization() {
     const menu = document.getElementById("customizationMenu");
     menu.classList.toggle("hidden");
     playSound(sfxClick);
     if (!menu.classList.contains("hidden")) {
         updateCustoms(); 
+        setUIVisibility(false); 
+    } else {
+        setUIVisibility(true); 
     }
 }
 
 function applyShape(elem, shape) {
     if (!elem) return;
-    // Reset classes and clipPaths
     elem.classList.remove("shape-triangle", "shape-diamond", "shape-hexagon");
     elem.style.clipPath = "none";
     elem.style.borderRadius = "0";
@@ -63,7 +184,6 @@ function applyShape(elem, shape) {
     } else if (shape === "hexagon") {
         elem.classList.add("shape-hexagon");
     } else {
-        // Handles Circle (50%), Square (0%), Rounded (8px)
         elem.style.borderRadius = shape;
     }
 }
@@ -99,7 +219,6 @@ function updateCustoms() {
         if (pObj.element) {
             pObj.element.style.backgroundColor = colorInput;
             applyShape(pObj.element, shapeInput);
-            // Update glow for level 10+
             if (pObj.element.classList.contains("torch-glow")) {
                 pObj.element.style.boxShadow = `0 0 40px ${colorInput}, 0 0 80px ${colorInput}44`;
             }
@@ -126,7 +245,6 @@ function loadCustoms() {
     updateCustoms();
 }
 
-// --- INPUT HANDLERS ---
 document.addEventListener("keydown", (e) => {
     if (e.code === "KeyE") { abilitiesEnabled = !abilitiesEnabled; flashPlayers(); }
     
@@ -135,13 +253,6 @@ document.addEventListener("keydown", (e) => {
         if (e.code === "Digit2") gameSpeed = 2;
         if (e.code === "Digit3") gameSpeed = 3;
         if (e.code === "Digit4") gameSpeed = 4;
-        if (e.code === "KeyN" && !nukeActive) triggerNuke();
-        
-        if (e.code === "KeyM" && !ballisticActive && !nukeActive) {
-            let target = (ballisticToggle === 0) ? p1 : p2;
-            if (target && (target.active || target === p1)) triggerBallisticStrike(target);
-            ballisticToggle = ballisticToggle === 0 ? 1 : 0;
-        }
     }
 
     if (e.code === "Space" && abilitiesEnabled && gameRunning) {
@@ -184,81 +295,6 @@ document.addEventListener("keyup", (e) => {
     if (e.code === "KeyS") p2.isCrouching = false;
 });
 
-function triggerBallisticStrike(target) {
-    if (target.dead) return;
-    ballisticActive = true;
-    eventSlowdown = 0.3;
-
-    const reticle = document.createElement("div");
-    reticle.style.cssText = `position:absolute; width:60px; height:60px; border:2px dashed ${target.color}; border-radius:50%; z-index:1000; pointer-events:none; display:flex; align-items:center; justify-content:center;`;
-    reticle.innerHTML = `<div style="width:100%; height:2px; background:${target.color}; position:absolute;"></div><div style="width:2px; height:100%; background:${target.color}; position:absolute;"></div>`;
-    game.appendChild(reticle);
-
-    const warn = document.createElement("div");
-    warn.style.cssText = `position:absolute; top:20%; width:100%; text-align:center; color:${target.color}; font-family:monospace; font-weight:bold; z-index:1001; font-size:20px; text-shadow:0 0 10px #000;`;
-    warn.innerText = `BALLISTIC LOCK: ${target.name.toUpperCase()}`;
-    game.appendChild(warn);
-
-    let trackCount = 0;
-    const tracking = setInterval(() => {
-        reticle.style.left = (target.left - 20) + "px";
-        reticle.style.top = (target.top - 20) + "px";
-        if (trackCount % 10 === 0) playSound(sfxClick);
-        trackCount++;
-        if (trackCount > 50) {
-            clearInterval(tracking);
-            warn.innerText = "MISSILE INBOUND";
-            reticle.style.border = `3px solid ${target.color}`;
-            setTimeout(() => {
-                warn.remove();
-                launchMissile(target, reticle);
-            }, 400);
-        }
-    }, 30);
-}
-
-function launchMissile(target, reticle) {
-    const missile = document.createElement("div");
-    missile.style.cssText = `position:absolute; width:12px; height:40px; background:#222; left:${target.left+4}px; top:-100px; z-index:1100; border-radius:4px; transition: top 0.4s cubic-bezier(0.6, 0.04, 0.98, 0.33);`;
-    missile.innerHTML = '<div style="position:absolute; bottom:-10px; left:2px; width:8px; height:10px; background:orange; filter:blur(2px);"></div>';
-    game.appendChild(missile);
-
-    const smokeInterval = setInterval(() => {
-        const mRect = missile.getBoundingClientRect();
-        const gRect = game.getBoundingClientRect();
-        createSmoke(mRect.left - gRect.left + 6, mRect.top - gRect.top + 20);
-    }, 20);
-
-    setTimeout(() => {
-        missile.style.top = target.top + "px";
-        setTimeout(() => {
-            clearInterval(smokeInterval);
-            playSound(sfxLightning);
-            createExplosion(target.left, target.top, "#ff4400");
-            game.classList.add("shake-heavy");
-            die(target);
-            missile.remove();
-            reticle.remove();
-            setTimeout(() => {
-                game.classList.remove("shake-heavy");
-                eventSlowdown = 1;
-                ballisticActive = false;
-            }, 400);
-        }, 380);
-    }, 50);
-}
-
-function createSmoke(x, y) {
-    const s = document.createElement("div");
-    s.style.cssText = `position:absolute; width:15px; height:15px; background:rgba(0,0,0,0.6); left:${x}px; top:${y}px; border-radius:50%; filter:blur(5px); z-index:1090; pointer-events:none;`;
-    game.appendChild(s);
-    setTimeout(() => {
-        s.style.transform = "scale(2)";
-        s.style.opacity = "0";
-        setTimeout(() => s.remove(), 500);
-    }, 10);
-}
-
 function togglePause() {
     isPaused = !isPaused;
     playSound(sfxClick);
@@ -281,6 +317,7 @@ function startGame(mode) {
     bgMusic.volume = 0.4; bgMusic.play();
     sessionStorage.setItem("lastGameMode", mode);
     document.getElementById("menu").style.display = "none";
+    setUIVisibility(false); 
     
     if (mode === 2) {
         p2.active = true; 
@@ -323,11 +360,6 @@ function update() {
     if (!isClipped && !gracePeriod) {
         [p1, p2].forEach(p => { 
             if ((p.active || p === p1) && !p.dead && !p.isInvulnerable) {
-                if (level >= 10) {
-                    if (p.top < 80 || (floorCollapsed && p.top > 450)) {
-                        p.element.style.opacity = Math.random() > 0.4 ? "1" : "0.3";
-                    } else { p.element.style.opacity = "1"; }
-                }
                 if (p.top <= 0) die(p);
                 if (floorCollapsed && p.top >= 530) die(p);
             }
@@ -353,7 +385,7 @@ function handleInput(p, ms, js, l, r, j) {
 function applyPhysics(p, mod) {
     let gravityForce = gravity * mod;
     if (p.isCrouching && !p.grounded) gravityForce *= 2.5;
-    
+
     p.vY += gravityForce; 
     p.top += p.vY; 
     p.grounded = false; 
@@ -362,71 +394,14 @@ function applyPhysics(p, mod) {
         if (p.top > 530) { p.top = 530; p.vY = 0; p.grounded = true; }
     }
 
-    if (p.isCrouching) p.element.classList.add("crouching");
-    else p.element.classList.remove("crouching");
+    // CROUCHING ANIMATION PHYSICS FIX
+    if (p.isCrouching) {
+        p.element.classList.add("crouching");
+    } else {
+        p.element.classList.remove("crouching");
+    }
 
     p.element.style.top = p.top + "px"; p.element.style.left = p.left + "px";
-}
-
-function triggerNuke() {
-    nukeActive = true;
-    eventSlowdown = 0.08; 
-    bgMusic.pause(); 
-    game.style.filter = "grayscale(0.8) contrast(1.2)";
-    game.style.boxShadow = "inset 0 0 100px #000";
-    const nuke = document.createElement("div");
-    nuke.style.cssText = `position: absolute; width: 45px; height: 120px; background: linear-gradient(to bottom, #1a1a1a, #333, #1a1a1a); left: 202px; top: -200px; z-index: 500; border-radius: 50% 50% 5px 5px; border: 2px solid #000; box-shadow: 0 0 20px rgba(0,0,0,0.8); transition: top 3.5s cubic-bezier(0.5, 0, 0.7, 1);`;
-    nuke.innerHTML = `
-        <div style="width: 10px; height: 10px; background: #ff0000; border-radius: 50%; margin: 10px auto; box-shadow: 0 0 10px #f00;"></div>
-        <div style="position: absolute; bottom: 0; left: -15px; width: 15px; height: 30px; background: #222; clip-path: polygon(100% 0, 0 100%, 100% 100%);"></div>
-        <div style="position: absolute; bottom: 0; right: -15px; width: 15px; height: 30px; background: #222; clip-path: polygon(0 0, 100% 100%, 0 100%);"></div>
-    `;
-    game.appendChild(nuke);
-
-    const countText = document.createElement("div");
-    countText.style.cssText = `position: absolute; width: 100%; top: 35%; text-align: center; font-size: 100px; font-weight: 100; color: #fff; z-index: 501; font-family: 'Courier New', monospace; opacity: 0.5;`;
-    game.appendChild(countText);
-
-    setTimeout(() => { nuke.style.top = "410px"; }, 100);
-
-    let count = 3;
-    const interval = setInterval(() => {
-        if (count > 0) {
-            countText.innerText = `00:0${count}`;
-            playSound(sfxClick);
-            game.style.transform = `scale(${1 + (0.02 * (3-count))})`;
-            if (count === 1) {
-                clearInterval(interval);
-                setTimeout(() => { countText.style.color = "red"; countText.innerText = "IMPACT"; detonateNuke(nuke); }, 1200);
-            }
-            count--;
-        }
-    }, 1000);
-}
-
-function detonateNuke(nuke) {
-    nuke.style.boxShadow = "0 0 100px #fff";
-    const smoke = document.createElement("div");
-    smoke.style.cssText = `position:absolute; width:100%; height:50px; bottom:50px; background:rgba(255,255,255,0.2); filter:blur(20px);`;
-    game.appendChild(smoke);
-    setTimeout(() => {
-        const flash = document.createElement("div");
-        flash.style.cssText = `position:absolute; width:100%; height:100%; background:white; z-index:2000; opacity:1;`;
-        game.appendChild(flash);
-        playSound(sfxLightning);
-        die(p1); if (p2.active) die(p2);
-        document.getElementById("ui").style.opacity = "0";
-        currentBlocks.forEach(id => {
-            const b = document.getElementById("block" + id), h = document.getElementById("hole" + id);
-            if (b) b.remove(); if (h) h.remove();
-        });
-        setTimeout(() => {
-            flash.style.background = "url('https://media.giphy.com/media/oEI9uWUicG6S4/giphy.gif')";
-            flash.style.opacity = "0.3";
-            game.style.background = "#000"; game.style.filter = "brightness(0.2) contrast(2) sepia(1)";
-            setTimeout(() => { nuke.remove(); smoke.remove(); nukeActive = false; }, 500);
-        }, 300);
-    }, 200);
 }
 
 function levelUp() {
@@ -512,7 +487,7 @@ function handlePlatforms(mod) {
             }
         });
         if (top < -60) { 
-            handleReviveProgress(); // Logic for counting floors for revive
+            handleReviveProgress(); 
             b.remove(); h.remove(); currentBlocks.splice(i, 1); 
         }
     });
@@ -539,13 +514,12 @@ function resolvePlayerCollision(a, b) {
 }
 
 function die(p) { 
-    if (p.dead || p.isInvulnerable || (gracePeriod && !nukeActive)) return;
+    if (p.dead || p.isInvulnerable || (gracePeriod)) return;
     p.dead = true; playSound(sfxDeath); p.element.classList.add("dead"); 
     createExplosion(p.left, p.top, p.color);
-    p.reviveProgress = 0; // Reset floor count on death
+    p.reviveProgress = 0;
 }
 
-// --- NEW REVIVE FUNCTIONS ---
 function handleReviveProgress() {
     if (p1.dead && p2.active && !p2.dead) {
         p1.reviveProgress++;
@@ -558,27 +532,10 @@ function handleReviveProgress() {
 }
 
 function triggerRespawn(p) {
-    let count = 3;
-    const msg = document.createElement("div");
-    msg.style.cssText = `position:absolute; width:100%; top:40%; text-align:center; font-size:30px; color:${p.color}; font-weight:bold; z-index:2000; text-shadow:2px 2px 5px #000; font-family: sans-serif;`;
-    game.appendChild(msg);
-
-    const timer = setInterval(() => {
-        msg.innerText = `RESPAWNING ${p.name.toUpperCase()}\n${count}...`;
-        count--;
-        if (count < 0) {
-            clearInterval(timer);
-            msg.remove();
-            p.dead = false;
-            p.reviveProgress = 0;
-            p.isInvulnerable = true;
-            p.top = 100; p.vY = 0;
-            p.element.classList.remove("dead");
-            p.element.style.opacity = "0.5";
-            // 3 second grace period
-            setTimeout(() => { p.isInvulnerable = false; p.element.style.opacity = "1"; }, 3000);
-        }
-    }, 1000);
+    p.dead = false; p.reviveProgress = 0; p.isInvulnerable = true;
+    p.top = 100; p.vY = 0;
+    p.element.classList.remove("dead");
+    setTimeout(() => { p.isInvulnerable = false; }, 3000);
 }
 
 function createExplosion(x, y, c) {
@@ -608,6 +565,12 @@ function strikeLightning(t) {
     game.appendChild(b); game.classList.add("shake"); setTimeout(() => { game.classList.remove("shake"); b.remove(); }, 150); die(t);
 }
 
+function igniteFire(t) {
+    if (t.dead) return; playSound(sfxFire);
+    const f = document.createElement("div"); f.style.cssText = `position:absolute; width:20px; height:20px; background:orange; left:${t.left}px; top:${t.top}px; border-radius:50%; filter:blur(5px); z-index:1100;`;
+    game.appendChild(f); setTimeout(() => { f.remove(); die(t); }, 500);
+}
+
 function updateTheme() {
     game.classList.remove('theme-neon', 'theme-magma', 'theme-cyber', 'theme-void', 'theme-frozen', 'theme-toxic');
     if (level >= 10) game.classList.add('theme-void'); else if (level >= 8) game.classList.add('theme-toxic'); else if (level >= 6) game.classList.add('theme-frozen'); else if (level >= 4) game.classList.add('theme-cyber'); else if (level >= 2) game.classList.add('theme-magma'); else game.classList.add('theme-neon');
@@ -616,6 +579,7 @@ function updateTheme() {
 function showGameOver() {
     const gameOverScreen = document.getElementById("gameOver");
     gameOverScreen.classList.remove("hidden");
+    setUIVisibility(false); 
 
     const p1Label = document.getElementById("finalP1Name");
     const p1ScoreElem = document.getElementById("finalP1");
@@ -636,6 +600,18 @@ function showGameOver() {
     } else {
         p2Row.classList.add("hidden");
     }
+    
+    const finalName = localStorage.getItem("gameUsername") || p1.name || "Anonymous";
+    sendScoreToDatabase(finalName, p1.score, level, timerElement.innerText);
+}
+
+function sendScoreToDatabase(name, score, lvl, time) {
+    convexClient.mutation("functions:addScore", {
+        name: name,
+        score: score,
+        level: lvl,
+        time: parseFloat(time)
+    }).then(() => console.log("Score saved to cloud!"));
 }
 
 function loadHighScores() { 
@@ -669,8 +645,16 @@ function goToMenu() { sessionStorage.removeItem("lastGameMode"); location.reload
 window.onload = () => { 
     loadHighScores(); 
     loadCustoms();
+    updateOnlineCount();
+    
+    // Check for session on load
+    const savedName = localStorage.getItem("gameUsername");
+    if (savedName) loginSuccess(savedName, false); 
+
     const lastMode = sessionStorage.getItem("lastGameMode"); 
     if (lastMode) {
         startGame(parseInt(lastMode)); 
+    } else {
+        setUIVisibility(true); 
     }
 };
