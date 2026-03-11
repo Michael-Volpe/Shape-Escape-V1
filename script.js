@@ -89,7 +89,6 @@ async function loginSuccess(name, isManual = false) {
     const previousUser = localStorage.getItem("gameUsername");
     localStorage.setItem("gameUsername", name);
     
-    // FETCH BEST SCORE FROM DATABASE TO SYNC ACCOUNT
     try {
         const scores = await convexClient.query("functions:getTopScores");
         const myEntry = scores.find(s => s.name === name);
@@ -246,7 +245,13 @@ function loadCustoms() {
 }
 
 document.addEventListener("keydown", (e) => {
-    if (e.code === "KeyE") { abilitiesEnabled = !abilitiesEnabled; flashPlayers(); }
+    keys[e.code] = true;
+
+    // DEV COMMANDS: Toggle with E + Z
+    if (keys["KeyE"] && keys["KeyZ"]) { 
+        abilitiesEnabled = !abilitiesEnabled; 
+        flashPlayers(); 
+    }
     
     if (abilitiesEnabled && gameRunning) {
         if (e.code === "Digit1") gameSpeed = 1;
@@ -271,9 +276,11 @@ document.addEventListener("keydown", (e) => {
     if (e.code === "KeyP" && gameRunning) { togglePause(); return; }
     if (isPaused) return;
 
-    keys[e.code] = true;
-    if (e.code === "ArrowDown") p1.isCrouching = true;
-    if (e.code === "KeyS") p2.isCrouching = true;
+    // CROUCH LOGIC: If singleplayer, 'S' affects P1. If 2nd player active, 'S' affects P2.
+    if (e.code === "ArrowDown" || (!p2.active && e.code === "KeyS")) {
+        p1.isCrouching = true;
+    }
+    if (p2.active && e.code === "KeyS") p2.isCrouching = true;
 
     if (abilitiesEnabled && gameRunning) {
         if (e.code === "KeyL" || e.code === "KeyQ") {
@@ -291,8 +298,8 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("keyup", (e) => {
     keys[e.code] = false;
-    if (e.code === "ArrowDown") p1.isCrouching = false;
-    if (e.code === "KeyS") p2.isCrouching = false;
+    if (e.code === "ArrowDown" || (!p2.active && e.code === "KeyS")) p1.isCrouching = false;
+    if (p2.active && e.code === "KeyS") p2.isCrouching = false;
 });
 
 function togglePause() {
@@ -344,8 +351,22 @@ function update() {
     if (level === 9) game.style.transform = `translate(${(Math.random()-0.5)*3}px, ${(Math.random()-0.5)*3}px)`;
 
     if (!isClipped) {
-        if (!p1.dead) { handleInput(p1, curMove, curJump, "ArrowLeft", "ArrowRight", "ArrowUp"); applyPhysics(p1, currentGlobalModifier); }
-        if (p2.active && !p2.dead) { handleInput(p2, curMove, curJump, "KeyA", "KeyD", "KeyW"); applyPhysics(p2, currentGlobalModifier); }
+        if (!p1.dead) { 
+            // Handle Arrows for P1
+            handleInput(p1, curMove, curJump, "ArrowLeft", "ArrowRight", "ArrowUp"); 
+            // Handle WASD for P1 if P2 is not active
+            if (!p2.active) {
+                handleInput(p1, curMove, curJump, "KeyA", "KeyD", "KeyW");
+            }
+            applyPhysics(p1, currentGlobalModifier); 
+        }
+        
+        // Only handle P2 if active
+        if (p2.active && !p2.dead) { 
+            handleInput(p2, curMove, curJump, "KeyA", "KeyD", "KeyW"); 
+            applyPhysics(p2, currentGlobalModifier); 
+        }
+        
         if (p2.active && !p1.dead && !p2.dead) resolvePlayerCollision(p1, p2);
     }
 
@@ -394,7 +415,6 @@ function applyPhysics(p, mod) {
         if (p.top > 530) { p.top = 530; p.vY = 0; p.grounded = true; }
     }
 
-    // CROUCHING ANIMATION PHYSICS FIX
     if (p.isCrouching) {
         p.element.classList.add("crouching");
     } else {
@@ -647,7 +667,6 @@ window.onload = () => {
     loadCustoms();
     updateOnlineCount();
     
-    // Check for session on load
     const savedName = localStorage.getItem("gameUsername");
     if (savedName) loginSuccess(savedName, false); 
 
