@@ -2,7 +2,7 @@
 window.addEventListener('load', () => {
     const selectedMode = sessionStorage.getItem("lastGameMode");
     if (selectedMode) {
-        sessionStorage.removeItem("lastGameMode");
+        // Mode is kept in sessionStorage to handle refreshes within gamemodes
         document.getElementById("menu").classList.add("hidden");
         startGame(parseInt(selectedMode));
     }
@@ -26,6 +26,14 @@ let gracePeriod = false;
 let transitioning = false; 
 let floorCollapsed = false; 
 
+// SAFETY FLAG: Prevents the game from overwriting the database with blank values during boot-up
+let isInitialLoad = true;
+
+// --- COIN SYSTEM VARIABLES (FIXED PERSISTENCE) ---
+let coinsCollected = 0; 
+// Immediate load from storage to prevent 0 display on refresh
+let totalCoins = parseInt(localStorage.getItem("totalCoins")) || 0;     
+
 // --- PHYSICS & DESIGN ---
 let platformSpeed = 1;    
 let moveSpeed = 3;        
@@ -41,10 +49,36 @@ let abilitiesEnabled = false;
 let isClipped = false; 
 let targetToggle = 0; 
 
-let p1 = { top: 250, left: 180, vY: 0, grounded: false, score: 0, dead: false, element: character, id: 'p1', color: '#ff4444', isCrouching: false, name: "Circle", shape: "50%", reviveProgress: 0, isInvulnerable: false };
-let p2 = { top: 250, left: 240, vY: 0, grounded: false, score: 0, dead: false, element: null, id: 'p2', active: false, color: '#4444ff', isCrouching: false, name: "Square", shape: "0%", reviveProgress: 0, isInvulnerable: false };
+// FIX: Initialized without hardcoded visuals so database can take over immediately
+let p1 = { top: 250, left: 180, vY: 0, grounded: false, score: 0, dead: false, element: character, id: 'p1', color: '', isCrouching: false, name: "", shape: "", skinClass: "", reviveProgress: 0, isInvulnerable: false };
+let p2 = { top: 250, left: 240, vY: 0, grounded: false, score: 0, dead: false, element: null, id: 'p2', active: false, color: '', isCrouching: false, name: "", shape: "", skinClass: "", reviveProgress: 0, isInvulnerable: false };
 
 let keys = {};
+
+// --- SKIN REGISTRY ---
+const SKIN_MAP = [
+    { id: 's1', name: 'Classic Stripes', class: 'skin-stripes' },
+    { id: 's2', name: 'Polka Dots', class: 'skin-dots' },
+    { id: 's3', name: 'Grid Lines', class: 'skin-glitch' },
+    { id: 's4', name: 'Bricks', class: 'skin-bricks' },
+    { id: 's5', name: 'Checkerboard', class: 'skin-checkered' },
+    { id: 's6', name: 'ZigZag', class: 'skin-zigzag' },
+    { id: 's7', name: 'Hex-Grid', class: 'skin-hex' },
+    { id: 's8', name: 'Ocean Waves', class: 'skin-waves' },
+    { id: 's9', name: 'Circuitry', class: 'skin-circuit' },
+    { id: 's10', name: 'Dragon Scales', class: 'skin-ruby' },
+    { id: 'off1', name: 'Solar Flare', class: 'skin-solar' },
+    { id: 'off2', name: 'Digital Matrix', class: 'skin-matrix' },
+    { id: 'off3', name: 'Plasma Flow', class: 'skin-plasma' },
+    { id: 'off4', name: 'Cyber Pulse', class: 'skin-cyber-pulse' },
+    { id: 'off5', name: 'Toxic Hazard', class: 'skin-toxic' },
+    { id: 'l1', name: 'Carbon Fiber', class: 'skin-carbon' },
+    { id: 'l2', name: 'Midnight Void', class: 'skin-void' },
+    { id: 'l3', name: 'Nebula Flow', class: 'skin-nebula' },
+    { id: 'l4', name: 'Digital Ghost', class: 'skin-ghost' },
+    { id: 'l5', name: 'Emerald Pulse', class: 'skin-emerald' },
+    { id: 'l6', name: 'Overdrive', class: 'skin-overdrive' }
+];
 
 // --- CONVEX CLIENT SETUP ---
 const convexClient = new convex.ConvexClient("https://famous-skunk-169.convex.cloud");
@@ -71,6 +105,8 @@ async function handleAuth(type) {
         } else {
             const result = await convexClient.query("functions:checkLogin", { username: user, password: pass });
             if (result && typeof result === 'object' && result.username) {
+                totalCoins = result.coins ?? 0; 
+                localStorage.setItem("totalCoins", totalCoins); // Save to disk
                 loginSuccess(result.username, true); 
             } else if (typeof result === 'string') {
                 loginSuccess(result, true);
@@ -90,11 +126,36 @@ async function loginSuccess(name, isManual = false) {
     localStorage.setItem("gameUsername", name);
     
     try {
+        // --- SYNC CUSTOMIZATION FROM CLOUD ON LOGIN ---
+        const cloudCustoms = await convexClient.query("functions:getCustomization", { username: name });
+        if (cloudCustoms) {
+            // Update UI inputs if they exist
+            if (document.getElementById("p1Color")) document.getElementById("p1Color").value = cloudCustoms.color;
+            if (document.getElementById("p1Shape")) document.getElementById("p1Shape").value = cloudCustoms.shape;
+            
+            // Save to local storage so loadCustoms/updateCustoms has the latest data
+            localStorage.setItem(`p1_CustomData`, JSON.stringify({
+                name: name, 
+                color: cloudCustoms.color, 
+                shape: cloudCustoms.shape,
+                skinClass: cloudCustoms.skinClass || ""
+            }));
+            
+            p1.skinClass = cloudCustoms.skinClass || "";
+        }
+
         const scores = await convexClient.query("functions:getTopScores");
         const myEntry = scores.find(s => s.name === name);
-        const bestScore = myEntry ? myEntry.score : 0;
-        localStorage.setItem("highScoreP1", bestScore);
+        if (myEntry) {
+            localStorage.setItem("highScoreP1", myEntry.score);
+            totalCoins = myEntry.coins || 0;
+            localStorage.setItem("totalCoins", totalCoins); // Sync disk
+        }
         loadHighScores(); 
+        updateCoinUI(); 
+        
+        // Force update of player objects and elements
+        await loadCustoms();
     } catch(e) { 
         if (previousUser !== name) {
             localStorage.setItem("highScoreP1", 0);
@@ -123,7 +184,6 @@ async function loginSuccess(name, isManual = false) {
     
     if (document.getElementById("p1Name")) {
         document.getElementById("p1Name").value = name;
-        updateCustoms();
     }
     
     if (isManual) {
@@ -131,10 +191,18 @@ async function loginSuccess(name, isManual = false) {
     }
 }
 
+// FIX: Always pull from localStorage to ensure bank displays correctly after refresh
+function updateCoinUI() {
+    const totalElem = document.getElementById("totalCoins");
+    const currentRunElem = document.getElementById("coinsEarnedDisplay");
+    
+    const bankBalance = localStorage.getItem("totalCoins") || 0;
+    if (totalElem) totalElem.innerText = bankBalance;
+    if (currentRunElem) currentRunElem.innerText = coinsCollected;
+}
+
 function logout() {
-    localStorage.removeItem("gameUsername");
-    localStorage.setItem("highScoreP1", 0);
-    localStorage.setItem("highScoreP2", 0);
+    localStorage.clear();
     location.reload();
 }
 
@@ -156,18 +224,49 @@ function setUIVisibility(visible) {
     
     if (authArea) authArea.style.display = displayStyle;
     if (onlineArea) onlineArea.style.display = displayStyle;
+
+    if (visible) {
+        document.body.classList.add("menu-open");
+    } else {
+        document.body.classList.remove("menu-open");
+    }
 }
 
-function toggleCustomization() {
+async function toggleCustomization() {
     const menu = document.getElementById("customizationMenu");
     menu.classList.toggle("hidden");
     playSound(sfxClick);
+    
     if (!menu.classList.contains("hidden")) {
-        updateCustoms(); 
         setUIVisibility(false); 
+        const name = localStorage.getItem("gameUsername");
+        if (name) {
+            // POPULATE DROPDOWNS FROM DATABASE
+            const ownedIds = await convexClient.query("functions:getOwnedSkins", { username: name });
+            populateSkinDropdown('p1Skin', ownedIds);
+        }
+        await updateCustoms(); 
     } else {
         setUIVisibility(true); 
     }
+}
+
+function populateSkinDropdown(elementId, ownedIds) {
+    const select = document.getElementById(elementId);
+    if (!select) return;
+    
+    const currentSkin = (elementId === 'p1Skin') ? p1.skinClass : p2.skinClass;
+    select.innerHTML = '<option value="">None</option>';
+    
+    SKIN_MAP.forEach(skin => {
+        if (ownedIds.includes(skin.id)) {
+            const opt = document.createElement('option');
+            opt.value = skin.class;
+            opt.innerText = skin.name;
+            if (skin.class === currentSkin) opt.selected = true;
+            select.appendChild(opt);
+        }
+    });
 }
 
 function applyShape(elem, shape) {
@@ -183,31 +282,55 @@ function applyShape(elem, shape) {
     } else if (shape === "hexagon") {
         elem.classList.add("shape-hexagon");
     } else {
-        elem.style.borderRadius = shape;
+        elem.style.borderRadius = shape || "50%";
     }
 }
 
-function updateCustoms() {
-    function updatePlayer(pObj, prefix) {
-        const nameInput = document.getElementById(`${prefix}Name`).value;
-        const colorInput = document.getElementById(`${prefix}Color`).value;
-        const shapeInput = document.getElementById(`${prefix}Shape`).value;
-        const previewElem = document.getElementById(`${prefix}Preview`);
-        const previewLabel = document.getElementById(`prevName${prefix.slice(-1)}`);
-        const uiLabel = document.getElementById(`label${prefix.toUpperCase()}`);
+async function updateCustoms() {
+    async function updatePlayer(pObj, prefix) {
+        const nameInput = document.getElementById(`${prefix}Name`)?.value || (prefix === 'p1' ? "Player 1" : "Player 2");
+        const colorInput = document.getElementById(`${prefix}Color`)?.value || (prefix === 'p1' ? "#ff4444" : "#4444ff");
+        const shapeInput = document.getElementById(`${prefix}Shape`)?.value || (prefix === 'p1' ? "50%" : "0%");
+        const skinInput = document.getElementById(`${prefix}Skin`)?.value || ""; 
 
-        pObj.name = nameInput || (prefix === 'p1' ? "Player 1" : "Player 2");
+        pObj.name = nameInput;
         pObj.color = colorInput;
         pObj.shape = shapeInput;
+        pObj.skinClass = skinInput;
 
         localStorage.setItem(`${prefix}_CustomData`, JSON.stringify({
-            name: pObj.name, color: pObj.color, shape: pObj.shape
+            name: pObj.name, color: pObj.color, shape: pObj.shape, skinClass: skinInput
         }));
 
-        if (previewLabel) previewLabel.innerText = pObj.name;
+        const loggedUser = localStorage.getItem("gameUsername");
+        
+        // FIX: Ensure mutations only trigger on user changes, not initial load
+        if (prefix === 'p1' && loggedUser && !isInitialLoad) {
+            try {
+                await convexClient.mutation("functions:updateCustomization", {
+                    username: loggedUser,
+                    color: colorInput,
+                    shape: shapeInput,
+                    skinClass: skinInput 
+                });
+            } catch (err) {
+                console.error("Failed to sync customs to cloud:", err);
+            }
+        }
+
+        const previewElem = document.getElementById(`${prefix}Preview`);
+        const uiLabel = document.getElementById(`label${prefix.toUpperCase()}`);
+
         if (previewElem) {
+            // Apply color and shape
             previewElem.style.backgroundColor = colorInput;
             applyShape(previewElem, shapeInput);
+            
+            // --- FIX: CLEAR PREVIOUS SKINS AND APPLY NEW ONE ---
+            SKIN_MAP.forEach(skin => previewElem.classList.remove(skin.class));
+            if (skinInput) {
+                previewElem.classList.add(skinInput);
+            }
         }
 
         if (uiLabel) {
@@ -218,36 +341,71 @@ function updateCustoms() {
         if (pObj.element) {
             pObj.element.style.backgroundColor = colorInput;
             applyShape(pObj.element, shapeInput);
+            
+            // --- FIX: CLEAR PREVIOUS SKINS AND APPLY NEW ONE ---
+            SKIN_MAP.forEach(skin => pObj.element.classList.remove(skin.class));
+            if (skinInput) {
+                pObj.element.classList.add(skinInput);
+            }
+            
             if (pObj.element.classList.contains("torch-glow")) {
                 pObj.element.style.boxShadow = `0 0 40px ${colorInput}, 0 0 80px ${colorInput}44`;
             }
         }
     }
-    updatePlayer(p1, 'p1');
-    updatePlayer(p2, 'p2');
+    await updatePlayer(p1, 'p1');
+    await updatePlayer(p2, 'p2');
 }
 
-function loadCustoms() {
-    ['p1', 'p2'].forEach(prefix => {
-        const saved = localStorage.getItem(`${prefix}_CustomData`);
-        if (saved) {
-            const data = JSON.parse(saved);
+async function loadCustoms() {
+    isInitialLoad = true; // Lock mutations while we populate from storage/cloud
+    
+    const loggedUser = localStorage.getItem("gameUsername");
+    let cloudData = null;
+    
+    // Attempt to pull the very latest from the cloud if logged in
+    if (loggedUser) {
+        try {
+            cloudData = await convexClient.query("functions:getCustomization", { username: loggedUser });
+        } catch (e) {
+            console.warn("Could not fetch cloud customs, falling back to local.");
+        }
+    }
+
+    for (const prefix of ['p1', 'p2']) {
+        let data = null;
+        
+        // If it's Player 1 and we have cloud data, use it. Otherwise, look at LocalStorage.
+        if (prefix === 'p1' && cloudData) {
+            data = cloudData;
+        } else {
+            const saved = localStorage.getItem(`${prefix}_CustomData`);
+            data = saved ? JSON.parse(saved) : null;
+        }
+
+        if (data) {
             const nameField = document.getElementById(`${prefix}Name`);
             const colorField = document.getElementById(`${prefix}Color`);
             const shapeField = document.getElementById(`${prefix}Shape`);
+            const skinField = document.getElementById(`${prefix}Skin`);
             
-            if (nameField) nameField.value = data.name;
-            if (colorField) colorField.value = data.color;
-            if (shapeField) shapeField.value = data.shape;
+            if (nameField) nameField.value = data.name || (prefix === 'p1' ? "" : "Player 2");
+            if (colorField) colorField.value = data.color || (prefix === 'p1' ? "#ff4444" : "#4444ff");
+            if (shapeField) shapeField.value = data.shape || "50%";
+            if (skinField) skinField.value = data.skinClass || "";
+            
+            if (prefix === 'p1') p1.skinClass = data.skinClass || "";
+            if (prefix === 'p2') p2.skinClass = data.skinClass || "";
         }
-    });
-    updateCustoms();
+    }
+    
+    await updateCustoms();
+    isInitialLoad = false; // Re-enable mutations for future user interactions
 }
 
 document.addEventListener("keydown", (e) => {
     keys[e.code] = true;
 
-    // DEV COMMANDS: Toggle with E + Z
     if (keys["KeyE"] && keys["KeyZ"]) { 
         abilitiesEnabled = !abilitiesEnabled; 
         flashPlayers(); 
@@ -276,7 +434,6 @@ document.addEventListener("keydown", (e) => {
     if (e.code === "KeyP" && gameRunning) { togglePause(); return; }
     if (isPaused) return;
 
-    // CROUCH LOGIC: If singleplayer, 'S' affects P1. If 2nd player active, 'S' affects P2.
     if (e.code === "ArrowDown" || (!p2.active && e.code === "KeyS")) {
         p1.isCrouching = true;
     }
@@ -318,11 +475,13 @@ function togglePause() {
     }
 }
 
-function startGame(mode) {
+async function startGame(mode) {
     if (gameRunning) return;
     cancelAnimationFrame(animationId);
     bgMusic.volume = 0.4; bgMusic.play();
     sessionStorage.setItem("lastGameMode", mode);
+    
+    document.getElementById("menu").classList.add("hidden");
     document.getElementById("menu").style.display = "none";
     setUIVisibility(false); 
     
@@ -333,7 +492,7 @@ function startGame(mode) {
         }
     }
     
-    updateCustoms(); 
+    await loadCustoms(); 
     loadHighScores(); 
     gameRunning = true; startTime = Date.now();
     animationId = requestAnimationFrame(update);
@@ -352,21 +511,16 @@ function update() {
 
     if (!isClipped) {
         if (!p1.dead) { 
-            // Handle Arrows for P1
             handleInput(p1, curMove, curJump, "ArrowLeft", "ArrowRight", "ArrowUp"); 
-            // Handle WASD for P1 if P2 is not active
             if (!p2.active) {
                 handleInput(p1, curMove, curJump, "KeyA", "KeyD", "KeyW");
             }
             applyPhysics(p1, currentGlobalModifier); 
         }
-        
-        // Only handle P2 if active
         if (p2.active && !p2.dead) { 
             handleInput(p2, curMove, curJump, "KeyA", "KeyD", "KeyW"); 
             applyPhysics(p2, currentGlobalModifier); 
         }
-        
         if (p2.active && !p1.dead && !p2.dead) resolvePlayerCollision(p1, p2);
     }
 
@@ -406,21 +560,17 @@ function handleInput(p, ms, js, l, r, j) {
 function applyPhysics(p, mod) {
     let gravityForce = gravity * mod;
     if (p.isCrouching && !p.grounded) gravityForce *= 2.5;
-
     p.vY += gravityForce; 
     p.top += p.vY; 
     p.grounded = false; 
-
     if (!floorCollapsed) {
         if (p.top > 530) { p.top = 530; p.vY = 0; p.grounded = true; }
     }
-
     if (p.isCrouching) {
         p.element.classList.add("crouching");
     } else {
         p.element.classList.remove("crouching");
     }
-
     p.element.style.top = p.top + "px"; p.element.style.left = p.left + "px";
 }
 
@@ -500,7 +650,13 @@ function handlePlatforms(mod) {
         [p1, p2].forEach(p => {
             if ((p.active || p === p1) && !scoredPlatforms[p.id].has(id)) {
                 if (p.top > top) {
-                    scoredPlatforms[p.id].add(id); p.score++;
+                    scoredPlatforms[p.id].add(id); 
+                    p.score++;
+                    let runGain = Math.min(level, 5);
+                    coinsCollected += runGain;
+                    totalCoins += runGain;
+                    localStorage.setItem("totalCoins", totalCoins); 
+                    updateCoinUI();
                     (p === p1 ? scoreP1Elem : scoreP2Elem).innerText = p.score;
                     checkAndSaveHighScore(p); if (p.score % 10 === 0) levelUp();
                 }
@@ -555,6 +711,8 @@ function triggerRespawn(p) {
     p.dead = false; p.reviveProgress = 0; p.isInvulnerable = true;
     p.top = 100; p.vY = 0;
     p.element.classList.remove("dead");
+    // Ensure the visual is updated correctly upon respawn
+    updateCustoms();
     setTimeout(() => { p.isInvulnerable = false; }, 3000);
 }
 
@@ -599,28 +757,17 @@ function updateTheme() {
 function showGameOver() {
     const gameOverScreen = document.getElementById("gameOver");
     gameOverScreen.classList.remove("hidden");
-    setUIVisibility(false); 
-
-    const p1Label = document.getElementById("finalP1Name");
-    const p1ScoreElem = document.getElementById("finalP1");
-    p1Label.innerText = p1.name + ":";
-    p1Label.style.color = p1.color;
-    p1ScoreElem.innerText = p1.score;
-    p1ScoreElem.style.color = p1.color;
-
-    const p2Row = document.getElementById("finalP2Row");
-    if (p2.active) {
-        p2Row.classList.remove("hidden");
-        const p2Label = document.getElementById("finalP2Name");
-        const p2ScoreElem = document.getElementById("finalP2");
-        p2Label.innerText = p2.name + ":";
-        p2Label.style.color = p2.color;
-        p2ScoreElem.innerText = p2.score;
-        p2ScoreElem.style.color = p2.color;
-    } else {
-        p2Row.classList.add("hidden");
+    setUIVisibility(true); 
+    if (document.getElementById("coinsEarned")) document.getElementById("coinsEarned").innerText = coinsCollected;
+    const p1Label = document.getElementById("finalP1Name"); const p1ScoreElem = document.getElementById("finalP1");
+    if (p1Label) { p1Label.innerText = p1.name + ":"; p1Label.style.color = p1.color; }
+    if (p1ScoreElem) { p1ScoreElem.innerText = p1.score; p1ScoreElem.style.color = p1.color; }
+    if (p2.active && document.getElementById("finalP2Row")) {
+        document.getElementById("finalP2Row").classList.remove("hidden");
+        const p2Label = document.getElementById("finalP2Name"); const p2ScoreElem = document.getElementById("finalP2");
+        if (p2Label) { p2Label.innerText = p2.name + ":"; p2Label.style.color = p2.color; }
+        if (p2ScoreElem) { p2ScoreElem.innerText = p2.score; p2ScoreElem.style.color = p2.color; }
     }
-    
     const finalName = localStorage.getItem("gameUsername") || p1.name || "Anonymous";
     sendScoreToDatabase(finalName, p1.score, level, timerElement.innerText);
 }
@@ -630,8 +777,12 @@ function sendScoreToDatabase(name, score, lvl, time) {
         name: name,
         score: score,
         level: lvl,
-        time: parseFloat(time)
-    }).then(() => console.log("Score saved to cloud!"));
+        time: parseFloat(time),
+        coinsEarned: coinsCollected 
+    }).then(() => {
+        coinsCollected = 0; 
+        updateCoinUI(); 
+    });
 }
 
 function loadHighScores() { 
@@ -662,18 +813,33 @@ function flashPlayers() {
 function restartGame() { location.reload(); }
 function goToMenu() { sessionStorage.removeItem("lastGameMode"); location.reload(); }
 
-window.onload = () => { 
+window.onload = async () => { 
     loadHighScores(); 
-    loadCustoms();
     updateOnlineCount();
+    updateCoinUI(); 
     
     const savedName = localStorage.getItem("gameUsername");
-    if (savedName) loginSuccess(savedName, false); 
+    if (savedName) {
+        try {
+            const scores = await convexClient.query("functions:getTopScores");
+            const myEntry = scores.find(s => s.name === savedName);
+            if (myEntry && myEntry.coins !== undefined) {
+                totalCoins = myEntry.coins;
+                localStorage.setItem("totalCoins", totalCoins);
+                updateCoinUI();
+            }
+            await loginSuccess(savedName, false); 
+        } catch (e) { 
+            console.warn("Sync failed, using local cache"); 
+            await loadCustoms();
+        }
+    } else {
+        await loadCustoms();
+        setUIVisibility(true); 
+    }
 
     const lastMode = sessionStorage.getItem("lastGameMode"); 
     if (lastMode) {
-        startGame(parseInt(lastMode)); 
-    } else {
-        setUIVisibility(true); 
+        await startGame(parseInt(lastMode)); 
     }
 };
