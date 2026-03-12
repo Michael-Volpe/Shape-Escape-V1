@@ -1,0 +1,606 @@
+/* --- BASE LAYOUT --- */
+body {
+    background-color: #050505;
+    color: white;
+    font-family: 'Courier New', Courier, monospace;
+    margin: 0;
+    padding: 0;
+    overflow-y: scroll; 
+    min-height: 100vh;
+}
+
+#shop-container {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 0 25px;
+    display: flex;
+    flex-direction: column;
+}
+
+/* --- FIXED HEADER (ULTRA-SPACED) --- */
+.shop-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #222;
+    padding: 30px 0; 
+    position: sticky;
+    top: 0;
+    background-color: #050505; 
+    z-index: 1001;
+}
+
+.back-btn {
+    background: transparent;
+    border: 1px solid #333;
+    color: #666;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 11px;
+    text-transform: uppercase;
+    transition: 0.2s;
+    margin-right: auto; 
+}
+
+.back-btn:hover {
+    color: white;
+    border-color: #ff4444;
+}
+
+.glitch {
+    font-size: 28px;
+    letter-spacing: 5px;
+    text-align: center;
+    margin: 0 40px; 
+    flex: 2; 
+}
+
+.currency-panel {
+    background: rgba(255, 235, 59, 0.04);
+    padding: 10px 18px;
+    border: 1px solid rgba(255, 235, 59, 0.2);
+    border-radius: 6px;
+    font-weight: bold;
+    color: #ffeb3b;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    margin-left: auto;
+}
+
+/* --- TABS (FIXED POSITIONING) --- */
+.shop-tabs {
+    display: flex;
+    gap: 15px;
+    margin: 0;
+    padding: 25px 0;
+    position: sticky;
+    top: 92px; 
+    background: #050505;
+    z-index: 1000;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 14px;
+    background: #111;
+    border: 1px solid #222;
+    color: #666;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 11px;
+    border-radius: 25px;
+    transition: 0.3s;
+}
+
+.tab-btn.active {
+    background: #1a1a1a;
+    border-color: #ff4444;
+    color: #fff;
+}
+
+/* --- SECTION CONTENT (SAFE ZONE) --- */
+.shop-section {
+    width: 100%;
+    padding-top: 50px; 
+    animation: fadeIn 0.4s ease-out;
+}
+
+/* ADJUSTED: padding-top increased to 240px to reveal top row skins */
+#skins-tab {
+    padding-top: 940px;
+}
+#offers-tab {
+    padding-top: 130px;
+}
+#crates-tab {
+    padding-top: 130px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    padding-left: 15px;
+    border-left: 3px solid #222;
+}
+
+.section-title {
+    font-size: 13px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin: 0;
+}
+
+.timer { 
+    color: #ff4444; 
+    font-size: 12px; 
+    font-weight: bold;
+    font-family: monospace;
+}
+
+/* --- ITEM GRID --- */
+.item-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    padding-bottom: 80px;
+}
+
+.shop-item, .crate-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid #1a1a1a;
+    padding: 30px 20px;
+    text-align: center;
+    position: relative;
+    transition: 0.2s ease;
+    overflow: visible; 
+}
+
+.shop-item:hover {
+    border-color: #444;
+    background: rgba(255, 255, 255, 0.04);
+    transform: translateY(-5px);
+}
+
+.shop-item.featured {
+    grid-column: span 2;
+}
+
+/* --- RARITY SYSTEM --- */
+.item-rarity-tag {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    font-size: 8px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.common { border-top: 3px solid #333 !important; }
+.uncommon { border-top: 3px solid #00ff88 !important; }
+.rare { border-top: 3px solid #00bbff !important; }
+.legendary { border-top: 3px solid #ff44ff !important; }
+
+/* --- SKIN PATTERNS (FIXED CONTRAST) --- */
+.item-preview {
+    width: 80px;
+    height: 80px;
+    margin: 10px auto 20px;
+    background-color: #222; 
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* CRATE VISUAL ENHANCEMENTS */
+.crate-card .item-preview {
+    background: #5d4037; /* Wooden brown */
+    border: 4px solid #3e2723;
+    box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
+    position: relative;
+    overflow: visible;
+}
+
+/* Crate Planks */
+.crate-card .item-preview::before,
+.crate-card .item-preview::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -10%;
+    width: 120%;
+    height: 6px;
+    background: #4e342e;
+    z-index: 1;
+}
+.crate-card .item-preview::before { transform: rotate(45deg); }
+.crate-card .item-preview::after { transform: rotate(-45deg); }
+
+/* SKINS */
+/* --- COMMON: Simple, Static, Gray --- */
+/* These are strictly flat and low-detail */
+.skin-stripes { 
+    background: repeating-linear-gradient(45deg, rgba(255,255,255,0.1), rgba(255,255,255,0.1) 10px, transparent 10px, transparent 20px); 
+}
+
+.skin-dots { 
+    background-image: radial-gradient(rgba(255,255,255,0.2) 15%, transparent 15%); 
+    background-size: 14px 14px; 
+}
+
+.skin-bricks {
+    background-image: linear-gradient(335deg, #222 5px, transparent 5px),
+                      linear-gradient(155deg, #222 5px, transparent 5px),
+                      linear-gradient(335deg, #222 5px, transparent 5px),
+                      linear-gradient(155deg, #222 5px, transparent 5px);
+    background-size: 20px 20px;
+    background-position: 0 0, 2px 5px, 10px 10px, 12px 15px;
+}
+
+/* --- UNCOMMON: Defined Geometry (Static, Solid Colors) --- */
+.skin-checkered { 
+    background-image: conic-gradient(#333 90deg, #444 90deg 180deg, #333 180deg 270deg, #444 270deg); 
+    background-size: 20px 20px; 
+}
+
+.skin-zigzag {
+    background: linear-gradient(135deg, #444 25%, transparent 25%) -10px 0,
+                linear-gradient(225deg, #444 25%, transparent 25%) -10px 0,
+                linear-gradient(315deg, #444 25%, transparent 25%),
+                linear-gradient(45deg, #444 25%, transparent 25%);
+    background-size: 20px 20px;
+    background-color: #222;
+}
+
+/* --- RARE: High-Contrast & Neon Glow (Static) --- */
+.skin-waves { 
+    background: radial-gradient(circle at 100% 50%, transparent 20%, #00bbff 21%, #00bbff 34%, transparent 35%); 
+    background-size: 15px 30px;
+    box-shadow: inset 0 0 15px #00bbff;
+}
+
+.skin-circuit {
+    background: #0a0a0a;
+    background-image: 
+        linear-gradient(rgba(0, 255, 136, 0.4) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 255, 136, 0.4) 1px, transparent 1px);
+    background-size: 20px 20px;
+    box-shadow: inset 0 0 15px #00ff88;
+}
+
+.skin-lava-static {
+    background: radial-gradient(circle at center, #ff4500, #8b0000);
+    box-shadow: inset 0 0 20px #ff0000;
+}
+
+/* --- LEGENDARY: Animated & Complex Effects --- */
+
+/* Digital Matrix - Vertical movement */
+.skin-matrix {
+    background: linear-gradient(rgba(0, 255, 70, 0.1), rgba(0, 255, 70, 0.1)),
+                repeating-linear-gradient(0deg, transparent 0, transparent 2px, #00ff46 2px, #00ff46 4px);
+    background-size: 100% 8px;
+    animation: matrixScroll 0.8s linear infinite;
+}
+
+/* Solar Flare - Pulsing Heat Map */
+.skin-solar {
+    background: radial-gradient(circle, #ffeb3b, #ff5722, #3e2723);
+    background-size: 200% 200%;
+    animation: solarPulse 2s ease-in-out infinite;
+    box-shadow: inset 0 0 30px #ff5722, 0 0 20px rgba(255, 87, 34, 0.4);
+}
+
+/* Void Shimmer - Deep Space with depth */
+.skin-void {
+    background: #000;
+    background-image: 
+        radial-gradient(2px 2px at 20px 30px, #fff, rgba(0,0,0,0)),
+        radial-gradient(3px 3px at 50px 10px, #7b61ff, rgba(0,0,0,0));
+    animation: voidGlow 3s infinite alternate;
+}
+
+/* Plasma - Shifting Liquid Colors */
+.skin-plasma {
+    background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+    background-size: 400% 400%;
+    animation: plasmaShift 5s ease infinite;
+    box-shadow: inset 0 0 25px rgba(255,255,255,0.2);
+}
+
+/* Cyber Pulse - Glowing lines that scan */
+.skin-cyber-pulse {
+    background-color: #050505;
+    background-image: linear-gradient(transparent 50%, rgba(0, 255, 255, 0.2) 50%),
+                      linear-gradient(90deg, transparent 50%, rgba(0, 255, 255, 0.2) 50%);
+    background-size: 30px 30px;
+    position: relative;
+    overflow: hidden;
+    animation: scanLine 2s linear infinite;
+}
+
+/* --- ANIMATION ENGINE --- */
+@keyframes matrixScroll { from { background-position: 0 0; } to { background-position: 0 40px; } }
+@keyframes solarPulse { 0%, 100% { transform: scale(1); filter: contrast(1.1); } 50% { transform: scale(1.1); filter: contrast(1.5); } }
+@keyframes voidGlow { from { box-shadow: inset 0 0 10px #7b61ff; } to { box-shadow: inset 0 0 40px #7b61ff; } }
+@keyframes plasmaShift { 
+    0% { background-position: 0% 50%; } 
+    50% { background-position: 100% 50%; } 
+    100% { background-position: 0% 50%; } 
+}
+@keyframes scanLine {
+    0% { background-position: 0 0; border-top: 2px solid #00ffff; }
+    50% { border-top: 2px solid transparent; }
+    100% { background-position: 0 60px; border-bottom: 2px solid #00ffff; }
+}
+
+.skin-hex {
+    background: #111;
+    background-image: 
+        linear-gradient(30deg, #222 12%, transparent 12.5%, transparent 87%, #222 87.5%, #222),
+        linear-gradient(150deg, #222 12%, transparent 12.5%, transparent 87%, #222 87.5%, #222),
+        linear-gradient(30deg, #222 12%, transparent 12.5%, transparent 87%, #222 87.5%, #222),
+        linear-gradient(150deg, #222 12%, transparent 12.5%, transparent 87%, #222 87.5%, #222),
+        linear-gradient(60deg, #333 25%, transparent 25.5%, transparent 75%, #333 75%, #333),
+        linear-gradient(60deg, #333 25%, transparent 25.5%, transparent 75%, #333 75%, #333);
+    background-size: 20px 35px;
+}
+
+/* --- RARE: Kinetic Neon (Static High-Contrast) --- */
+
+/* Bio-Hazard - Toxic neon warning pattern */
+.skin-toxic {
+    background: #000;
+    background-image: repeating-linear-gradient(transparent, transparent 10px, #ccff00 10px, #ccff00 11px),
+                      repeating-linear-gradient(90deg, transparent, transparent 10px, #ccff00 10px, #ccff00 11px);
+    box-shadow: inset 0 0 20px #ccff00;
+}
+
+/* Ruby Crystal - Geometric red facets */
+.skin-ruby {
+    background: linear-gradient(135deg, #700000 0%, #ff0000 50%, #700000 100%);
+    background-size: 20px 20px;
+    box-shadow: inset 0 0 15px #ff4444;
+}
+
+/* --- LEGENDARY: Reality-Bending (Animated) --- */
+
+/* Nebula Flow - Gaseous cosmic shifting */
+.skin-nebula {
+    background: radial-gradient(circle at center, #6a11cb 0%, #2575fc 100%);
+    background-size: 200% 200%;
+    animation: nebulaMove 4s ease infinite;
+    filter: hue-rotate(45deg);
+}
+
+/* Digital Ghost - Rapid flickering glitch blocks */
+.skin-ghost {
+    background: #111;
+    background-image: repeating-linear-gradient(45deg, #00ffff 0, #00ffff 1px, transparent 0, transparent 50%);
+    background-size: 10px 10px;
+    animation: ghostFlicker 0.15s steps(2) infinite;
+    box-shadow: 0 0 10px #00ffff;
+}
+
+/* Emerald Pulse - Bioluminescent tech veins */
+.skin-emerald {
+    background-color: #000;
+    background-image: radial-gradient(#00ff88 1px, transparent 1px);
+    background-size: 15px 15px;
+    animation: emeraldPulse 2s ease-in-out infinite;
+}
+
+/* Overdrive - Speeding light streaks */
+.skin-overdrive {
+    background: linear-gradient(90deg, transparent 50%, #ff00ff 50%);
+    background-size: 20px 100%;
+    animation: overdriveSpeed 0.4s linear infinite;
+    box-shadow: inset 0 0 20px #ff00ff;
+}
+
+/* --- ADDITIONAL ANIMATIONS --- */
+@keyframes nebulaMove {
+    0%, 100% { background-position: 0% 0%; }
+    50% { background-position: 100% 100%; }
+}
+
+@keyframes ghostFlicker {
+    0% { opacity: 1; transform: skewX(0deg); }
+    50% { opacity: 0.7; transform: skewX(10deg); }
+}
+
+@keyframes emeraldPulse {
+    0%, 100% { box-shadow: inset 0 0 5px #00ff88; filter: brightness(1); }
+    50% { box-shadow: inset 0 0 25px #00ff88; filter: brightness(1.8); }
+}
+
+@keyframes overdriveSpeed {
+    from { background-position: 0 0; }
+    to { background-position: 40px 0; }
+}
+
+
+/* END OF SKINS */
+
+.skin-glitch { 
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,0.2) 0px, rgba(255,255,255,0.2) 1px, transparent 1px, transparent 4px); 
+}
+
+/* --- CRATE ODDS OVERLAY (FIXED HOVER) --- */
+.crate-odds-overlay {
+    position: absolute;
+    top: 10px; 
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    width: 130px;
+    background: rgba(5, 5, 5, 0.98);
+    backdrop-filter: blur(5px);
+    border: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 15px;
+    opacity: 0;
+    transition: 0.3s ease;
+    z-index: 10;
+    pointer-events: none; 
+}
+
+/* Trigger only when hovering over the crate image */
+.crate-card .item-preview:hover + .crate-odds-overlay {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.odds-title {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #00ff88;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #222;
+    padding-bottom: 5px;
+}
+
+.odds-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    margin: 3px 0;
+}
+
+.odds-row span:last-child { font-weight: bold; }
+
+/* --- UI ELEMENTS --- */
+.item-name {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 18px;
+    color: #888;
+}
+
+.buy-btn {
+    width: 100%;
+    background: transparent;
+    border: 1px solid #00ff88;
+    color: #00ff88;
+    padding: 12px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: monospace;
+    font-weight: bold;
+    border-radius: 30px;
+    transition: 0.2s;
+    position: relative;
+    z-index: 5;
+}
+
+.buy-btn:hover {
+    background: #00ff88;
+    color: #000;
+}
+
+/* --- CRATE OVERLAY & SPINNER --- */
+#crate-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.96);
+    z-index: 5000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.spinner-container {
+    position: relative;
+    width: 100%;
+    height: 140px;
+    background: rgba(255,255,255,0.03);
+    border-top: 1px solid #222;
+    border-bottom: 1px solid #222;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+}
+
+.spinner-marker {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    height: 100%;
+    background: #00ff88;
+    box-shadow: 0 0 15px #00ff88;
+    z-index: 10;
+}
+
+#item-spinner {
+    display: flex;
+    will-change: transform;
+}
+
+.spinner-item {
+    min-width: 100px;
+    max-width: 100px;
+    height: 100px;
+    margin: 0 10px;
+    background: #111;
+    border: 1px solid #222;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+}
+
+/* SPINNER DIVIDER LINES */
+.spinner-item::after {
+    content: '';
+    position: absolute;
+    right: -11px; 
+    top: 15%;
+    width: 2px;
+    height: 70%;
+    background: linear-gradient(to bottom, transparent, #333, transparent);
+}
+
+/* --- REWARD DISPLAY --- */
+#reward-display {
+    text-align: center;
+    margin-top: 40px;
+    animation: rewardPop 0.5s cubic-bezier(0.17, 0.67, 0.83, 1.2) forwards;
+}
+
+.reward-content h2 {
+    color: #00ff88;
+    font-size: 11px;
+    letter-spacing: 4px;
+    margin-bottom: 10px;
+}
+
+#reward-name {
+    font-size: 24px;
+    letter-spacing: 2px;
+    margin-bottom: 30px;
+}
+
+@keyframes rewardPop {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.hidden { display: none !important; }
