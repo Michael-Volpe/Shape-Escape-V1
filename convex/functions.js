@@ -4,7 +4,6 @@ import { v } from "convex/values";
 /**
  * 1. AUTHENTICATION & ACCOUNT CREATION
  */
-
 export const createAccount = mutation({
   args: { username: v.string(), password: v.string() },
   handler: async (ctx, args) => {
@@ -17,31 +16,27 @@ export const createAccount = mutation({
       throw new Error("That name is already taken! Choose a different legend.");
     }
 
-    // Create main user record
     await ctx.db.insert("users", { 
       username: args.username, 
       password: args.password,
       created: Date.now() 
     });
 
-    // Initialize the bank (The Coins Table)
     await ctx.db.insert("coins", {
       username: args.username,
       totalCoins: 0
     });
 
-    // Initialize Skin Inventory (Every player starts with basic stripes)
     await ctx.db.insert("skins", {
       username: args.username,
       ownedSkins: ["s1"] 
     });
 
-    // Initialize Customization
     await ctx.db.insert("customization", {
       username: args.username,
       color: "#ff4444",
       shape: "50%",
-      skinClass: "skin-stripes" // FIXED: Start with stripes visible instead of empty
+      skinClass: "skin-stripes"
     });
 
     return { success: true };
@@ -78,7 +73,6 @@ export const checkLogin = query({
 /**
  * 2. CUSTOMIZATION & SKINS SYSTEM
  */
-
 export const getCustomization = query({
   args: { username: v.string() },
   handler: async (ctx, args) => {
@@ -102,7 +96,6 @@ export const updateCustomization = mutation({
       .filter((q) => q.eq(q.field("username"), args.username))
       .unique();
 
-    // FIXED: If skinClass is empty/null from the frontend, keep the old one!
     const finalSkin = (args.skinClass === "" && existing) ? existing.skinClass : args.skinClass;
 
     if (existing) {
@@ -136,7 +129,6 @@ export const getOwnedSkins = query({
 export const unlockSkin = mutation({
   args: { username: v.string(), skinId: v.string(), price: v.number() },
   handler: async (ctx, args) => {
-    // 1. Get the player's coin record
     const coinRecord = await ctx.db
       .query("coins")
       .filter((q) => q.eq(q.field("username"), args.username))
@@ -146,12 +138,10 @@ export const unlockSkin = mutation({
       throw new Error("Insufficient funds!");
     }
 
-    // 2. Subtract coins first
     await ctx.db.patch(coinRecord._id, {
       totalCoins: coinRecord.totalCoins - args.price
     });
 
-    // 3. Find or Create the Skin Entry
     const skinRecord = await ctx.db
       .query("skins")
       .filter((q) => q.eq(q.field("username"), args.username))
@@ -178,7 +168,6 @@ export const unlockSkin = mutation({
 /**
  * 3. COINS & SCORING
  */
-
 export const getUserCoins = query({
   args: { username: v.string() },
   handler: async (ctx, args) => {
@@ -199,7 +188,7 @@ export const addScore = mutation({
     coinsEarned: v.number() 
   },
   handler: async (ctx, args) => {
-    // Save to general scores table for global leaderboard
+    // 1. General High Scores Table
     await ctx.db.insert("scores", {
       name: args.name,
       score: args.score,
@@ -209,7 +198,7 @@ export const addScore = mutation({
       date: Date.now(),
     });
 
-    // Save specifically to md_scores for Meteor Dash statistics
+    // 2. Meteor Dash Specific Table
     await ctx.db.insert("md_scores", {
       username: args.name,
       meteorsAvoided: args.score,
@@ -219,6 +208,7 @@ export const addScore = mutation({
       timestamp: Date.now()
     });
 
+    // 3. Update User Bank
     const coinRecord = await ctx.db
       .query("coins")
       .filter((q) => q.eq(q.field("username"), args.name))
@@ -240,7 +230,6 @@ export const addScore = mutation({
 /**
  * 4. LEADERBOARD & STATS
  */
-
 export const getTopScores = query({
   handler: async (ctx) => {
     const allUsers = await ctx.db.query("users").collect();
@@ -273,10 +262,8 @@ export const getTopScores = query({
   },
 });
 
-// Specific leaderboard for Meteor Dash pulling from md_scores
 export const getMeteorLeaderboard = query({
   handler: async (ctx) => {
-    // 1. Fetch a large batch of recent scores
     const records = await ctx.db
       .query("md_scores")
       .order("desc") 
@@ -284,7 +271,6 @@ export const getMeteorLeaderboard = query({
     
     const uniqueHighs = new Map();
 
-    // 2. Group by user and only keep their BEST run
     records.forEach(run => {
       const name = run.username || "Anonymous";
       if (!uniqueHighs.has(name) || run.meteorsAvoided > uniqueHighs.get(name).meteorsAvoided) {
@@ -292,7 +278,6 @@ export const getMeteorLeaderboard = query({
       }
     });
 
-    // 3. Convert back to array, sort by score, and take top 100
     return Array.from(uniqueHighs.values())
       .sort((a, b) => {
         if (b.meteorsAvoided !== a.meteorsAvoided) {
