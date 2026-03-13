@@ -79,7 +79,6 @@ const SKIN_MAP = [
     { id: 'l5', name: 'Emerald Pulse', class: 'skin-emerald' },
     { id: 'l6', name: 'Overdrive', class: 'skin-overdrive' }
 ];
-
 // --- CONVEX CLIENT SETUP ---
 const convexClient = new convex.ConvexClient("https://famous-skunk-169.convex.cloud");
 
@@ -122,26 +121,22 @@ async function handleAuth(type) {
 async function loginSuccess(name, isManual = false) {
     if (!name || typeof name !== 'string') return;
     
-    const previousUser = localStorage.getItem("gameUsername");
     localStorage.setItem("gameUsername", name);
     
     try {
         // --- SYNC CUSTOMIZATION FROM CLOUD ON LOGIN ---
         const cloudCustoms = await convexClient.query("functions:getCustomization", { username: name });
         if (cloudCustoms) {
-            // Update UI inputs if they exist
-            if (document.getElementById("p1Color")) document.getElementById("p1Color").value = cloudCustoms.color;
-            if (document.getElementById("p1Shape")) document.getElementById("p1Shape").value = cloudCustoms.shape;
+            // FIX: Force p1 object state immediately
+            p1.skinClass = cloudCustoms.skinClass || "";
             
-            // Save to local storage so loadCustoms/updateCustoms has the latest data
+            // Save to local storage backup
             localStorage.setItem(`p1_CustomData`, JSON.stringify({
                 name: name, 
                 color: cloudCustoms.color, 
                 shape: cloudCustoms.shape,
                 skinClass: cloudCustoms.skinClass || ""
             }));
-            
-            p1.skinClass = cloudCustoms.skinClass || "";
         }
 
         const scores = await convexClient.query("functions:getTopScores");
@@ -149,19 +144,15 @@ async function loginSuccess(name, isManual = false) {
         if (myEntry) {
             localStorage.setItem("highScoreP1", myEntry.score);
             totalCoins = myEntry.coins || 0;
-            localStorage.setItem("totalCoins", totalCoins); // Sync disk
+            localStorage.setItem("totalCoins", totalCoins); 
         }
         loadHighScores(); 
         updateCoinUI(); 
         
-        // Force update of player objects and elements
+        // Force update of visual characters
         await loadCustoms();
     } catch(e) { 
-        if (previousUser !== name) {
-            localStorage.setItem("highScoreP1", 0);
-            localStorage.setItem("highScoreP2", 0);
-            loadHighScores();
-        }
+        console.error("Login sync failed:", e);
     }
 
     document.getElementById("login-form").classList.add("hidden");
@@ -243,6 +234,9 @@ async function toggleCustomization() {
         if (name) {
             // POPULATE DROPDOWNS FROM DATABASE
             const ownedIds = await convexClient.query("functions:getOwnedSkins", { username: name });
+            
+            // CRITICAL FIX: Ensure local p1 object is loaded BEFORE building the menu
+            await loadCustoms();
             populateSkinDropdown('p1Skin', ownedIds);
         }
         await updateCustoms(); 
@@ -255,15 +249,20 @@ function populateSkinDropdown(elementId, ownedIds) {
     const select = document.getElementById(elementId);
     if (!select) return;
     
+    // Find skin from the current player object state
     const currentSkin = (elementId === 'p1Skin') ? p1.skinClass : p2.skinClass;
-    select.innerHTML = '<option value="">None</option>';
     
+    select.innerHTML = '<option value="">None</option>';
     SKIN_MAP.forEach(skin => {
         if (ownedIds.includes(skin.id)) {
             const opt = document.createElement('option');
             opt.value = skin.class;
             opt.innerText = skin.name;
-            if (skin.class === currentSkin) opt.selected = true;
+            
+            // This line ensures the menu visually highlights the skin you actually have
+            if (skin.class === currentSkin) {
+                opt.selected = true;
+            }
             select.appendChild(opt);
         }
     });
@@ -296,22 +295,25 @@ async function updateCustoms() {
         pObj.name = nameInput;
         pObj.color = colorInput;
         pObj.shape = shapeInput;
-        pObj.skinClass = skinInput;
+        
+        // FIX: Don't let an empty menu string overwrite your skin object during initial load
+        if (skinInput !== "" || !isInitialLoad) {
+            pObj.skinClass = skinInput;
+        }
 
         localStorage.setItem(`${prefix}_CustomData`, JSON.stringify({
-            name: pObj.name, color: pObj.color, shape: pObj.shape, skinClass: skinInput
+            name: pObj.name, color: pObj.color, shape: pObj.shape, skinClass: pObj.skinClass
         }));
 
         const loggedUser = localStorage.getItem("gameUsername");
         
-        // FIX: Ensure mutations only trigger on user changes, not initial load
         if (prefix === 'p1' && loggedUser && !isInitialLoad) {
             try {
                 await convexClient.mutation("functions:updateCustomization", {
                     username: loggedUser,
                     color: colorInput,
                     shape: shapeInput,
-                    skinClass: skinInput 
+                    skinClass: pObj.skinClass 
                 });
             } catch (err) {
                 console.error("Failed to sync customs to cloud:", err);
@@ -321,16 +323,12 @@ async function updateCustoms() {
         const previewElem = document.getElementById(`${prefix}Preview`);
         const uiLabel = document.getElementById(`label${prefix.toUpperCase()}`);
 
+        // Sync Customization Menu Preview
         if (previewElem) {
-            // Apply color and shape
             previewElem.style.backgroundColor = colorInput;
             applyShape(previewElem, shapeInput);
-            
-            // --- FIX: CLEAR PREVIOUS SKINS AND APPLY NEW ONE ---
             SKIN_MAP.forEach(skin => previewElem.classList.remove(skin.class));
-            if (skinInput) {
-                previewElem.classList.add(skinInput);
-            }
+            if (pObj.skinClass) previewElem.classList.add(pObj.skinClass);
         }
 
         if (uiLabel) {
@@ -338,14 +336,15 @@ async function updateCustoms() {
             uiLabel.style.color = colorInput;
         }
 
+        // Sync Actual Game Character
         if (pObj.element) {
             pObj.element.style.backgroundColor = colorInput;
             applyShape(pObj.element, shapeInput);
             
-            // --- FIX: CLEAR PREVIOUS SKINS AND APPLY NEW ONE ---
+            // Clear all previous skin classes and apply the current one
             SKIN_MAP.forEach(skin => pObj.element.classList.remove(skin.class));
-            if (skinInput) {
-                pObj.element.classList.add(skinInput);
+            if (pObj.skinClass) {
+                pObj.element.classList.add(pObj.skinClass);
             }
             
             if (pObj.element.classList.contains("torch-glow")) {
@@ -358,49 +357,40 @@ async function updateCustoms() {
 }
 
 async function loadCustoms() {
-    isInitialLoad = true; // Lock mutations while we populate from storage/cloud
-    
+    isInitialLoad = true; 
     const loggedUser = localStorage.getItem("gameUsername");
     let cloudData = null;
-    
-    // Attempt to pull the very latest from the cloud if logged in
+
     if (loggedUser) {
         try {
             cloudData = await convexClient.query("functions:getCustomization", { username: loggedUser });
-        } catch (e) {
-            console.warn("Could not fetch cloud customs, falling back to local.");
-        }
+        } catch (e) { console.warn("Cloud sync failed."); }
     }
 
     for (const prefix of ['p1', 'p2']) {
-        let data = null;
-        
-        // If it's Player 1 and we have cloud data, use it. Otherwise, look at LocalStorage.
-        if (prefix === 'p1' && cloudData) {
-            data = cloudData;
-        } else {
-            const saved = localStorage.getItem(`${prefix}_CustomData`);
-            data = saved ? JSON.parse(saved) : null;
-        }
+        const saved = localStorage.getItem(`${prefix}_CustomData`);
+        let localData = saved ? JSON.parse(saved) : null;
+        let data = (prefix === 'p1' && cloudData) ? cloudData : localData;
 
         if (data) {
-            const nameField = document.getElementById(`${prefix}Name`);
-            const colorField = document.getElementById(`${prefix}Color`);
-            const shapeField = document.getElementById(`${prefix}Shape`);
-            const skinField = document.getElementById(`${prefix}Skin`);
-            
-            if (nameField) nameField.value = data.name || (prefix === 'p1' ? "" : "Player 2");
-            if (colorField) colorField.value = data.color || (prefix === 'p1' ? "#ff4444" : "#4444ff");
-            if (shapeField) shapeField.value = data.shape || "50%";
-            if (skinField) skinField.value = data.skinClass || "";
-            
+            // 1. Force the internal player object to the correct skin
             if (prefix === 'p1') p1.skinClass = data.skinClass || "";
             if (prefix === 'p2') p2.skinClass = data.skinClass || "";
+
+            // 2. Force UI fields to match the loaded data
+            const skinField = document.getElementById(`${prefix}Skin`);
+            if (skinField) skinField.value = data.skinClass || "";
+            
+            const colorField = document.getElementById(`${prefix}Color`);
+            if (colorField) colorField.value = data.color || (prefix === 'p1' ? "#ff4444" : "#4444ff");
+            
+            const shapeField = document.getElementById(`${prefix}Shape`);
+            if (shapeField) shapeField.value = data.shape || "50%";
         }
     }
     
     await updateCustoms();
-    isInitialLoad = false; // Re-enable mutations for future user interactions
+    isInitialLoad = false; 
 }
 
 let devBuffer = "";
@@ -509,10 +499,14 @@ async function startGame(mode) {
     if (mode === 2) {
         p2.active = true; 
         if (!document.getElementById("character2")) {
-            p2.element = document.createElement("div"); p2.element.id = "character2"; game.appendChild(p2.element);
+            p2.element = document.createElement("div"); 
+            p2.element.id = "character2"; 
+            p2.element.classList.add("player", "preview-box"); 
+            game.appendChild(p2.element);
         }
     }
     
+    // Load customs AFTER creating the character elements
     await loadCustoms(); 
     loadHighScores(); 
     gameRunning = true; startTime = Date.now();
@@ -864,5 +858,3 @@ window.onload = async () => {
         await startGame(parseInt(lastMode)); 
     }
 };
-
-
