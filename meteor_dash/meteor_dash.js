@@ -1,4 +1,9 @@
 /* --- METEOR DASH CORE LOGIC --- */
+
+// --- CONVEX CLIENT SETUP ---
+// Using 'convexClient' to match your main script.js perfectly
+const convexClient = new window.convex.ConvexClient("https://famous-skunk-169.convex.cloud");
+
 const character = document.getElementById("character");
 const game = document.getElementById("game");
 const levelElement = document.getElementById("levelValue");
@@ -47,7 +52,6 @@ window.addEventListener('load', async () => {
     
     gameRunning = true;
     startTime = Date.now();
-    // Ensure clean start theme
     game.className = 'theme-forest'; 
     updateScenicTheme(0);
     animationId = requestAnimationFrame(update);
@@ -91,7 +95,6 @@ async function checkDevSpell() {
     if (hashed === DEV_HASH) {
         abilitiesEnabled = !abilitiesEnabled;                
         flashPlayers(); 
-        // Reset effects if disabled
         if (!abilitiesEnabled) {
             isClipped = false;
             gameSpeed = 1;
@@ -115,10 +118,8 @@ function flashPlayers() {
 function togglePause() {
     if (!gameRunning) return;
     isPaused = !isPaused;
-    
     const pauseOverlay = document.getElementById("pauseOverlay");
     if (pauseOverlay) pauseOverlay.classList.toggle("hidden", !isPaused);
-
     if (!isPaused) {
         startTime += (Date.now() - pauseTime);
         animationId = requestAnimationFrame(update);
@@ -141,7 +142,6 @@ function update() {
         levelElement.innerText = level;
         game.classList.add("level-up-flash");
         setTimeout(() => game.classList.remove("level-up-flash"), 500);
-        
         let themeIndex = Math.min(Math.floor((level - 1) / 2), SCENIC_THEMES.length - 1);
         updateScenicTheme(themeIndex);
     }
@@ -169,14 +169,8 @@ function update() {
                 if (keys["ArrowLeft"] || keys["KeyA"]) p.left -= clipSpd;
                 if (keys["ArrowRight"] || keys["KeyD"]) p.left += clipSpd;
             }
-
-            // --- SYMMETRICAL BOUNDARIES ---
-            // Left: Half player (11px) out of bounds
             if (p.left < -11) p.left = -11;
-            // Right: 500 Container - 11px overlap = 489. 
-            // Offset for border/scrolling, 478-482 is typically the sweet spot for "half-in" visually.
             if (p.left > 482) p.left = 482; 
-            
             p.element.style.top = p.top + "px";
             p.element.style.left = p.left + "px";
         }
@@ -257,46 +251,74 @@ function updateMeteors() {
     }
 }
 
-function showGameOver() {
+// --- FIXED GAME OVER & CONVEX SYNC ---
+async function showGameOver() {
     gameRunning = false;
     cancelAnimationFrame(animationId);
     
-    document.getElementById("finalScore").innerText = p1.score;
-    document.getElementById("finalTime").innerText = timerElement.innerText;
-    document.getElementById("coinsEarnedDisplay").innerText = currentRunCoins;
-    
-    const finalLevelEl = document.getElementById("finalLevel");
-    if (finalLevelEl) finalLevelEl.innerText = level;
+    // 1. Capture final states
+    const finalScore = p1.score;
+    const finalTime = timerElement.innerText; // Keep as string for display
+    const user = localStorage.getItem("gameUsername") || "Guest";
 
+    // 2. UI Updates - MATCHING YOUR HTML IDs
+    // "DODGED" count
+    const dodgedEl = document.getElementById("finalP1");
+    if (dodgedEl) dodgedEl.innerText = finalScore;
+    
+    // "SURVIVED" time (Matches the ⏱️ icon)
+    const timeEl = document.getElementById("finalTime");
+    if (timeEl) timeEl.innerText = finalTime + "s";
+    
+    // "COINS" earned (Matches the 🪙 icon)
+    const coinsEl = document.getElementById("coinsEarnedDisplay"); 
+    if (coinsEl) coinsEl.innerText = currentRunCoins;
+
+    // "LEVEL" reached (Matches the 🚀 icon)
+    const levelEl = document.getElementById("finalLevel");
+    if (levelEl) levelEl.innerText = level;
+    
+    // 3. Local Backup Save
     const totalBank = parseInt(localStorage.getItem("totalCoins")) || 0;
     localStorage.setItem("totalCoins", totalBank + currentRunCoins);
+
+    // 4. CONVEX CLOUD SYNC
+    try {
+        await convexClient.mutation("functions:addScore", {
+            name: user,
+            score: finalScore,
+            level: level,
+            time: parseFloat(finalTime),
+            coinsEarned: currentRunCoins
+        });
+        console.log("Stats synced to Cloud successfully!");
+    } catch (err) {
+        console.error("Cloud Sync Failed:", err);
+    }
+
     document.getElementById("gameOver").classList.remove("hidden");
 }
 
 // --- INPUT HANDLER ---
 document.addEventListener("keydown", (e) => {
     keys[e.code] = true;
-
     if (e.key.length === 1) { 
         devBuffer += e.key.toLowerCase();
         if (devBuffer.length > 6) devBuffer = devBuffer.slice(-6);
         checkDevSpell();
     }
-    
     if (abilitiesEnabled && gameRunning) {
         if (e.code === "Digit1") gameSpeed = 1;
         if (e.code === "Digit2") gameSpeed = 2;
         if (e.code === "Digit3") gameSpeed = 3;
         if (e.code === "Digit4") gameSpeed = 4;
     }
-
     if (e.code === "Space" && abilitiesEnabled && gameRunning) {
         isClipped = !isClipped;
         const shadow = isClipped ? "0 0 20px #fff, 0 0 40px #0ff" : "none";
         p1.element.style.boxShadow = shadow;
         if (p2.element) p2.element.style.boxShadow = shadow;
     }
-
     if (e.code === "KeyP") togglePause();
 });
 
